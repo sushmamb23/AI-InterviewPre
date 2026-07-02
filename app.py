@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from graph import build_graph
 from state import InterviewState
 from tools import save_report, load_resume_text, evaluate_user_answers
+import threading
 
 BASE_DIR = Path(__file__).resolve().parent
 LOGS_DIR = BASE_DIR / "logs"
@@ -34,11 +35,32 @@ app.add_middleware(
 graph = build_graph()
 
 
+def run_with_timeout(func, timeout_seconds=30):
+    """Run a function with a timeout"""
+    result = {"value": None, "exception": None}
+    
+    def target():
+        try:
+            result["value"] = func()
+        except Exception as e:
+            result["exception"] = e
+    
+    thread = threading.Thread(target=target, daemon=True)
+    thread.start()
+    thread.join(timeout=timeout_seconds)
+    
+    if thread.is_alive():
+        raise TimeoutError(f"Operation timed out after {timeout_seconds} seconds")
+    
+    if result["exception"]:
+        raise result["exception"]
+    
+    return result["value"]
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index():
     return HTMLResponse("<h2>AI Interview Coach API</h2><p>Use the frontend or upload a resume.</p>")
-
-
 @app.post("/analyze")
 async def analyze_resume(
     role: str = Form(...),
@@ -66,7 +88,23 @@ async def analyze_resume(
             error=None,
         )
 
-        result = graph.invoke(initial_state)
+        # Run graph with timeout protection
+        try:
+            result = run_with_timeout(lambda: graph.invoke(initial_state), timeout_seconds=60)
+        except TimeoutError:
+            logger.error("Graph invocation timed out")
+            # Return cached/fallback result
+            result = initial_state
+            result["interview_questions"] = [
+                "Tell me about a project where you delivered measurable impact.",
+                "How have you used your technical skills to solve a challenging problem?",
+                "What results or metrics did you improve in your most relevant project?",
+                "How would you handle a difficult stakeholder situation?",
+                "Describe a time you led a team or mentored someone.",
+            ]
+            result["resume_summary"] = f"{role.title()} candidate with {experience} years of experience"
+            result["gaps"] = ["Strengthen domain-specific technical examples"]
+            
         report_path = save_report(result, BASE_DIR / "reports")
         result["report_path"] = report_path
 
@@ -91,3 +129,8 @@ async def evaluate_answers(payload: dict):
     except Exception as exc:
         logger.exception("Evaluation failed")
         return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8000)
