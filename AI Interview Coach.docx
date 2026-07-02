@@ -1,0 +1,231 @@
+AI Interview Coach
+System Architecture Documentation
+Generated: July 02, 2026
+
+Table of Contents
+•	1. Executive Summary
+•	2. System Overview
+•	3. Architecture Layers
+•	4. Components & Modules
+•	5. Data Flow
+•	6. Technology Stack
+•	7. API Endpoints
+•	8. Error Handling
+•	9. Deployment Architecture
+•	10. Future Enhancements
+ 1. Executive Summary
+The AI Interview Coach is a full-stack application that uses Large Language Models (LLMs) via Ollama and LangGraph for workflow orchestration to conduct intelligent mock interviews. Users upload resumes, answer interview questions sequentially, and receive AI-powered feedback.
+Key Objectives
+•	Generate role-specific interview questions based on resume analysis
+•	Provide sequential, user-friendly interview experience
+•	Deliver personalized feedback and scoring on answers
+•	Ensure resilience with graceful degradation when LLM unavailable
+•	Maintain clean, maintainable, and scalable architecture
+ 2. System Overview
+Architecture Diagram
+The system consists of three main components working together:
+• Streamlit Frontend (Port 8501) - User interface
+• FastAPI Backend (Port 8000) - REST API server
+• Ollama Service (Port 11434) - Local LLM for AI processing
+Technology Stack
+Layer	Technology	Purpose
+Frontend	Streamlit	Interactive web UI
+Backend	FastAPI	REST API server
+Server	Uvicorn	ASGI server
+Orchestration	LangGraph	Workflow DAG
+LLM	Ollama	Local language models
+File Processing	PyPDF2, python-docx	Resume parsing
+Database	SQLite	State checkpointing
+HTTP Client	Requests	API communication
+ 3. Architecture Layers
+Layer 1: User Interface (Streamlit)
+Responsibilities:
+•	Display resume upload form
+•	Show interview questions one at a time
+•	Capture and store user answers
+•	Display evaluation results with scores
+•	Enable navigation between questions
+•	Provide progress tracking
+•	Allow report download
+Layer 2: API (FastAPI)
+Responsibilities:
+•	Handle POST /analyze endpoint (resume upload + question generation)
+•	Handle POST /evaluate endpoint (answer scoring)
+•	Validate input data
+•	Manage CORS for cross-origin requests
+•	Implement timeout protection (60 seconds)
+•	Provide structured error responses
+•	Log all activities
+Layer 3: Graph Processing (LangGraph)
+Workflow Steps:
+Step	Function
+1	parse_resume_node - Extract resume insights
+2	identify_gaps_node - Find skill gaps
+3	generate_questions_node - Create interview questions
+4	generate_feedback_node - Generate preparation tips
+5	evaluate_answers_node - Score answers
+6	finalize_report_node - Generate JSON report
+Layer 4: Tools & Utilities
+Key Functions:
+•	load_resume_text() - Parse PDF, DOCX, TXT files
+•	extract_resume_insights() - Call Ollama for resume analysis
+•	build_interview_questions() - Generate questions with fallback
+•	evaluate_user_answers() - Score and provide feedback
+•	save_report() - Write results to JSON
+Layer 5: Ollama Client
+Features:
+•	Service availability check (1-second timeout)
+•	Automatic model selection and fallback
+•	Request timeout protection (2 seconds)
+•	Graceful error handling
+•	No indefinite hangs
+ 4. Components & Modules
+frontend.py
+Type: Streamlit UI
+Description: Resume upload, question display, results visualization
+app.py
+Type: FastAPI Server
+Description: REST API endpoints, request routing, error handling
+graph.py
+Type: LangGraph DAG
+Description: Workflow definition, state management
+nodes.py
+Type: Processing Nodes
+Description: Individual processing steps in workflow
+tools.py
+Type: Utility Functions
+Description: Resume parsing, text processing, report generation
+ollama_client.py
+Type: LLM Integration
+Description: Ollama communication with timeout protection
+prompts.py
+Type: Prompt Templates
+Description: AI instruction prompts for various tasks
+state.py
+Type: State Schema
+Description: TypedDict definitions for InterviewState
+database.py
+Type: Data Persistence
+Description: SQLite initialization and management
+ 5. Data Flow
+Interview Generation Flow
+1. User uploads resume file and enters role/experience
+2. Frontend sends POST /analyze request
+3. Backend parses resume (PyPDF2/python-docx)
+4. LangGraph executes workflow with 60-second timeout
+5. Each node processes data and calls Ollama when needed
+6. Fallback mechanisms activate if Ollama unavailable
+7. Results returned with generated questions
+8. Frontend displays questions sequentially
+Answer Evaluation Flow
+1. User enters answers for all questions
+2. Frontend sends POST /evaluate request
+3. Backend calls evaluate_user_answers() for each answer
+4. Ollama evaluates answer and assigns score (0-10)
+5. If Ollama unavailable, fallback scoring used
+6. Evaluations returned with scores and feedback
+7. Frontend displays results and allows report download
+ 6. Technology Stack
+Language: Python 3.8+
+Frontend Framework: Streamlit
+Backend Framework: FastAPI
+Web Server: Uvicorn
+Workflow Orchestration: LangGraph
+LLM Service: Ollama (local)
+Resume Parsing: PyPDF2, python-docx
+Database: SQLite3
+HTTP Client: Requests
+Logging: Python logging module
+ 7. API Endpoints
+POST /analyze
+Purpose: Upload resume and generate interview questions
+Request Parameters:
+•	• role (string) - Target job role
+• experience (string) - Years of experience
+• resume_file (file) - PDF, DOCX, or TXT file
+Response:
+• success (boolean) - Request status
+• result (object) - Contains questions, summary, gaps
+• report_path (string) - Path to generated report
+POST /evaluate
+Purpose: Score and provide feedback on answers
+Request Parameters:
+• role (string) - Job role
+• questions (array) - Interview questions
+• answers (object) - User answers by question
+Response:
+• success (boolean) - Request status
+• evaluations (array) - Scores and feedback for each answer
+ 8. Error Handling
+Timeout Protection
+• Request timeout: 120 seconds (frontend to backend)
+• Graph execution timeout: 60 seconds
+• Ollama request timeout: 2 seconds
+• Ollama socket check: 1 second
+• Fallback triggers if any timeout occurs
+Graceful Degradation
+When Ollama is unavailable:
+• Default interview questions are provided
+• Heuristic resume summaries are generated
+• Simple length-based scoring is used
+• Generic preparation tips are shown
+• System remains fully functional
+Error Response Format
+All errors return JSON with structure:
+{"success": false, "error": "error message"}
+ 9. Deployment Architecture
+Development (Current)
+Single Windows/Linux machine running:
+• Streamlit (port 8501)
+• FastAPI (port 8000)
+• Ollama (port 11434)
+• SQLite (local file storage)
+Production Recommendation
+Distributed architecture with:
+• Load balancer for incoming requests
+• Multiple FastAPI instances
+• Dedicated Ollama service
+• PostgreSQL database
+• Redis cache layer
+• Cloud storage for reports
+ 10. Key Design Decisions
+Timeout Protection
+Rationale: Prevents indefinite hangs when Ollama unavailable
+Sequential Questions
+Rationale: Improves UX compared to large form
+Stateless API
+Rationale: Enables horizontal scaling
+LangGraph Workflow
+Rationale: Provides clarity and testability
+Graceful Fallbacks
+Rationale: Ensures functionality even without LLM
+Local Ollama
+Rationale: Maintains data privacy, no API costs
+ 11. Future Enhancements
+Phase 2: Memory & Analytics
+•	User profiles and authentication
+•	Interview history tracking
+•	Performance analytics
+•	Progress visualization
+Phase 3: Advanced Features
+•	Video interview support
+•	Real-time feedback
+•	Peer comparison
+•	Role-specific question banks
+•	Custom question templates
+Phase 4: Enterprise
+•	Multi-tenant support
+•	Role-based access control
+•	Advanced analytics dashboards
+•	API for third-party integration
+•	Webhook support
+ Summary
+The AI Interview Coach is a well-architected system that balances simplicity with functionality. Its layered design allows for clear separation of concerns, while timeout protection and fallback mechanisms ensure reliability. The use of LangGraph provides a maintainable and scalable foundation for future enhancements.
+
+Key Strengths:
+•	Modular design with clear responsibilities
+•	Resilient to external service failures
+•	Scalable stateless API
+•	Excellent user experience with sequential questions
+•	Comprehensive error handling
+•	Ready for production deployment
