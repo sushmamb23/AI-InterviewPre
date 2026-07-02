@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+streamlit
+langgraph
+langgraph-checkpoint-sqlite
+ollama
+requests
+python-dotenv
+PyPDF2
+python-docx
